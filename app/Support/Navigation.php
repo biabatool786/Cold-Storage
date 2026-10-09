@@ -4,75 +4,131 @@ namespace App\Support;
 
 use App\Enums\PermissionName;
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 
 class Navigation
 {
     /**
-     * @return list<array{label: string, items: list<array{label: string, href: string, active: bool}>}>
+     * Hierarchical sidebar modules for the authenticated layout.
+     *
+     * @return list<array{
+     *     key: string,
+     *     label: string,
+     *     icon: string,
+     *     type: 'link'|'group',
+     *     href?: string,
+     *     active: bool,
+     *     open: bool,
+     *     items: list<array{label: string, href: string, active: bool}>
+     * }>
      */
-    public static function groups(User $user): array
+    public static function modules(User $user): array
     {
-        $groups = [];
+        $modules = [];
 
-        $overview = [];
         if ($user->hasPermission(PermissionName::DashboardView)) {
-            $overview[] = self::link('Dashboard', route('dashboard'), request()->routeIs('dashboard'));
-        }
-        if ($overview !== []) {
-            $groups[] = ['label' => 'Overview', 'items' => $overview];
+            $modules[] = self::leaf('overview', 'Dashboard', 'home', route('dashboard'), request()->routeIs('dashboard'));
         }
 
-        $platform = [];
-        if ($user->hasPermission(PermissionName::TenantsView)) {
-            $platform[] = self::link('Tenants', route('tenants.index'), request()->routeIs('tenants.*'));
-        }
-        if ($user->hasPermission(PermissionName::PlatformReports)) {
-            $platform[] = self::link('Reports', route('reports.index'), request()->routeIs('reports.index'));
-        }
-        if ($user->hasPermission('approval_limits.edit')) {
-            $platform[] = self::link('Approval limits', route('approval-limits.index'), request()->routeIs('approval-limits.*'));
-        }
+        $platform = self::collect($user, [
+            ['Tenants', 'tenants.index', 'tenants.*', PermissionName::TenantsView->value],
+            ['Platform reports', 'reports.index', 'reports.index', PermissionName::PlatformReports->value],
+            ['Approval limits', 'approval-limits.index', 'approval-limits.*', 'approval_limits.edit'],
+        ]);
         if ($platform !== []) {
-            $groups[] = ['label' => 'Platform', 'items' => $platform];
+            $modules[] = self::group('platform', 'Platform', 'building', $platform);
         }
 
-        $workspace = [];
-        foreach ([
-            ['Customers', 'customers.index', 'customers.*', 'customers.view'],
-            ['Products', 'commodities.index', 'commodities.*', 'products.view'],
-            ['Chambers', 'chambers.index', 'chambers.*', 'chambers.view'],
-            ['Storage layout', 'chambers.index', 'chambers.show', 'chambers.view'],
+        $facility = self::collect($user, [
+            ['Chambers', 'chambers.index', ['chambers.index', 'chambers.show'], 'chambers.view'],
             ['Occupancy map', 'occupancy.index', 'occupancy.*', 'chambers.view'],
-            ['Bookings', 'bookings.index', 'bookings.index', 'bookings.view'],
+            ['Branches', 'branches.index', 'branches.*', 'branches.view'],
+        ]);
+        if ($facility !== []) {
+            $modules[] = self::group('facility', 'Facility & layout', 'warehouse', $facility);
+        }
+
+        $customers = self::collect($user, [
+            ['Customer register', 'customers.index', 'customers.*', 'customers.view'],
+        ]);
+        if ($customers !== []) {
+            $modules[] = self::group('customers', 'Customers', 'users', $customers);
+        }
+
+        $products = self::collect($user, [
+            ['Products', 'commodities.index', 'commodities.*', 'products.view'],
+        ]);
+        if ($products !== []) {
+            $modules[] = self::group('products', 'Product master', 'package', $products);
+        }
+
+        $bookings = self::collect($user, [
+            ['Bookings', 'bookings.index', ['bookings.index', 'bookings.show', 'bookings.create'], 'bookings.view'],
             ['Availability', 'bookings.availability', 'bookings.availability', 'bookings.view'],
             ['Waiting list', 'bookings.waiting', 'bookings.waiting', 'bookings.view'],
             ['Seasonal contracts', 'bookings.contracts', 'bookings.contracts', 'bookings.view'],
-            ['Gate today', 'gates.index', 'gates.index', 'gate.view'],
+        ]);
+        if ($bookings !== []) {
+            $modules[] = self::group('bookings', 'Bookings', 'calendar', $bookings);
+        }
+
+        $gate = self::collect($user, [
+            ['Gate today', 'gates.index', ['gates.index', 'gates.show'], 'gate.view'],
             ['Expected vehicles', 'gates.expected', 'gates.expected', 'gate.view'],
             ['Visitors', 'gates.visitors', 'gates.visitors', 'gate.view'],
             ['Blocked vehicles', 'gates.blocked', 'gates.blocked', 'gate.view'],
-            ['Gate history', 'gates.history', 'gates.history', 'gate.view'],
-            ['Weighbridge', 'weighments.index', 'weighments.index', 'weighbridge.view'],
+            ['Gate history', 'gates.history', 'gates.history*', 'gate.view'],
+        ]);
+        if ($gate !== []) {
+            $modules[] = self::group('gate', 'Gate', 'truck', $gate);
+        }
+
+        $weighbridge = self::collect($user, [
+            ['Weighments', 'weighments.index', ['weighments.index', 'weighments.show'], 'weighbridge.view'],
             ['Tolerance alerts', 'weighments.alerts', 'weighments.alerts', 'weighbridge.view'],
             ['Calibration log', 'weighments.calibration', 'weighments.calibration', 'weighbridge.view'],
+        ]);
+        if ($weighbridge !== []) {
+            $modules[] = self::group('weighbridge', 'Weighbridge', 'scale', $weighbridge);
+        }
+
+        $receiving = self::collect($user, [
             ['Expected arrivals', 'receiving.expected', 'receiving.expected', 'receiving.view'],
             ['GRN', 'grns.index', 'grns.*', 'grn.view'],
             ['Put-away', 'putaways.index', 'putaways.*', 'inventory.view'],
-            ['Stock', 'inventory.index', 'inventory.index', 'inventory.view'],
+        ]);
+        if ($receiving !== []) {
+            $modules[] = self::group('receiving', 'Receiving', 'inbox', $receiving);
+        }
+
+        $inventory = self::collect($user, [
+            ['Stock', 'inventory.index', ['inventory.index', 'inventory.lots.*', 'lots.*'], 'inventory.view'],
             ['Stock ledger', 'inventory.ledger', 'inventory.ledger', 'inventory.print'],
-            ['FIFO/FEFO', 'inventory.suggestions', 'inventory.suggestions', 'inventory.view'],
-            ['Transfers', 'inventory.transfers', 'inventory.transfers', 'transfers.view'],
-            ['Holds', 'inventory.holds', 'inventory.holds', 'inventory.view'],
-            ['VAS', 'inventory.services', 'inventory.services', 'inventory.view'],
+            ['FIFO / FEFO', 'inventory.suggestions', 'inventory.suggestions', 'inventory.view'],
+            ['Transfers', 'inventory.transfers', 'inventory.transfers*', 'transfers.view'],
+            ['Holds', 'inventory.holds', 'inventory.holds*', 'inventory.view'],
+            ['VAS', 'inventory.services', 'inventory.services*', 'inventory.view'],
             ['Shrinkage', 'inventory.shrinkage', 'inventory.shrinkage', 'inventory.view'],
-            ['Counts', 'inventory.counts', 'inventory.counts', 'inventory.view'],
-            ['Variances', 'inventory.variances', 'inventory.variances', 'inventory.view'],
+            ['Counts', 'inventory.counts', 'inventory.counts*', 'inventory.view'],
+            ['Variances', 'inventory.variances', 'inventory.variances*', 'inventory.view'],
             ['Aging', 'inventory.aging', 'inventory.aging', 'inventory.view'],
             ['Stock export', 'inventory.export', 'inventory.export', 'inventory.print'],
-            ['Dispatch', 'deliveries.index', 'deliveries.*', 'dispatch.view'],
-            ['Returns', 'dispatch.returns', 'dispatch.returns', 'dispatch.view'],
-            ['Transfer-out', 'dispatch.transfer-outs', 'dispatch.transfer-outs', 'dispatch.view'],
-            ['Monitoring', 'monitoring.index', 'monitoring.index', 'monitoring.view'],
+        ]);
+        if ($inventory !== []) {
+            $modules[] = self::group('inventory', 'Inventory', 'layers', $inventory);
+        }
+
+        $dispatch = self::collect($user, [
+            ['Delivery orders', 'deliveries.index', 'deliveries.*', 'dispatch.view'],
+            ['Returns', 'dispatch.returns', 'dispatch.returns*', 'dispatch.view'],
+            ['Transfer-out', 'dispatch.transfer-outs', 'dispatch.transfer-outs*', 'dispatch.view'],
+        ]);
+        if ($dispatch !== []) {
+            $modules[] = self::group('dispatch', 'Dispatch', 'send', $dispatch);
+        }
+
+        $monitoring = self::collect($user, [
+            ['Live dashboard', 'monitoring.index', 'monitoring.index', 'monitoring.view'],
             ['Readings history', 'monitoring.history', 'monitoring.history', 'monitoring.view'],
             ['Sensors', 'monitoring.sensors', 'monitoring.sensors*', 'monitoring.view'],
             ['Alarms', 'monitoring.alarms', 'monitoring.alarms*', 'monitoring.view'],
@@ -81,53 +137,161 @@ class Navigation
             ['Calibrations', 'monitoring.calibrations', 'monitoring.calibrations*', 'monitoring.view'],
             ['Excursions', 'monitoring.excursions', 'monitoring.excursions*', 'monitoring.print'],
             ['Incidents', 'monitoring.incidents', 'monitoring.incidents', 'monitoring.view'],
+        ]);
+        if ($monitoring !== []) {
+            $modules[] = self::group('monitoring', 'Monitoring', 'thermometer', $monitoring);
+        }
+
+        $finance = self::collect($user, [
             ['Invoices', 'invoices.index', 'invoices.*', 'billing.view'],
             ['Payments', 'payments.index', 'payments.*', 'payments.view'],
             ['Expenses', 'expenses.index', 'expenses.*', 'expenses.view'],
+        ]);
+        if ($finance !== []) {
+            $modules[] = self::group('finance', 'Finance', 'currency', $finance);
+        }
+
+        $operations = self::collect($user, [
             ['Equipment', 'assets.index', 'assets.*', 'maintenance.view'],
             ['Energy', 'energy.index', 'energy.*', 'energy.view'],
             ['Labor', 'labor.index', 'labor.*', 'labor.view'],
             ['Quality', 'quality-checks.index', 'quality-checks.*', 'quality.view'],
             ['Notices', 'notices.index', 'notices.*', 'notifications.view'],
-        ] as [$label, $route, $active, $permission]) {
-            if ($user->hasPermission($permission)) {
-                $workspace[] = self::link($label, route($route), request()->routeIs($active));
-            }
+        ]);
+        if ($operations !== []) {
+            $modules[] = self::group('operations', 'Operations', 'wrench', $operations);
         }
 
-        if ($user->hasPermission('branches.view')) {
-            $workspace[] = self::link('Branches', route('branches.index'), request()->routeIs('branches.*'));
-        }
-
-        if ($user->hasPermission(PermissionName::UsersView)) {
-            $workspace[] = self::link('Users & Roles', route('users.index'), request()->routeIs('users.*'));
-        }
-        if ($user->hasPermission('users.edit')) {
-            $workspace[] = self::link('Permission matrix', route('security.matrix'), request()->routeIs('security.matrix'));
-        }
-        if ($user->hasPermission('login_history.view')) {
-            $workspace[] = self::link('Login history', route('login-history.index'), request()->routeIs('login-history.*'));
+        $security = self::collect($user, [
+            ['Users & roles', 'users.index', 'users.*', PermissionName::UsersView->value],
+            ['Permission matrix', 'security.matrix', 'security.matrix', 'users.edit'],
+            ['Login history', 'login-history.index', 'login-history.*', 'login_history.view'],
+        ]);
+        if ($security !== []) {
+            $modules[] = self::group('security', 'Users & security', 'shield', $security);
         }
 
         if (! $user->hasPermission(PermissionName::PlatformReports) && $user->hasPermission(PermissionName::ReportsView)) {
-            $workspace[] = self::link('Reports', route('reports.index'), request()->routeIs('reports.index'));
+            $modules[] = self::leaf('reports', 'Reports', 'chart', route('reports.index'), request()->routeIs('reports.index'));
         }
 
-        if ($workspace !== []) {
-            $groups[] = ['label' => 'Workspace', 'items' => $workspace];
-        }
-
-        $admin = [];
+        $account = [];
         if ($user->hasPermission(PermissionName::PlatformSettings) || $user->hasPermission(PermissionName::TenantSettings)) {
-            $admin[] = self::link('Settings', route('settings.edit'), request()->routeIs('settings.*'));
+            $account[] = self::link('Settings', route('settings.edit'), request()->routeIs('settings.*'));
         }
         if ($user->hasPermission(PermissionName::AuditView)) {
-            $admin[] = self::link('Audit Logs', route('audit.index'), request()->routeIs('audit.index'));
+            $account[] = self::link('Audit logs', route('audit.index'), request()->routeIs('audit.index'));
         }
-        $admin[] = self::link('Profile', route('profile.edit'), request()->routeIs('profile.*'));
-        $groups[] = ['label' => 'Account', 'items' => $admin];
+        $account[] = self::link('Profile', route('profile.edit'), request()->routeIs('profile.*'));
+        $modules[] = self::group('account', 'Account', 'user', $account);
+
+        return $modules;
+    }
+
+    /**
+     * Backward-compatible flat groups (tests / legacy callers).
+     *
+     * @return list<array{label: string, items: list<array{label: string, href: string, active: bool}>}>
+     */
+    public static function groups(User $user): array
+    {
+        $groups = [];
+        foreach (self::modules($user) as $module) {
+            if ($module['type'] === 'link') {
+                $groups[] = [
+                    'label' => $module['label'],
+                    'items' => [self::link($module['label'], $module['href'], $module['active'])],
+                ];
+                continue;
+            }
+            if ($module['items'] !== []) {
+                $groups[] = ['label' => $module['label'], 'items' => $module['items']];
+            }
+        }
 
         return $groups;
+    }
+
+    /**
+     * @param  list<array{0: string, 1: string, 2: string|list<string>, 3: string}>  $rows
+     * @return list<array{label: string, href: string, active: bool}>
+     */
+    private static function collect(User $user, array $rows): array
+    {
+        $items = [];
+        foreach ($rows as [$label, $routeName, $activePattern, $permission]) {
+            if (! $user->hasPermission($permission) || ! Route::has($routeName)) {
+                continue;
+            }
+            $items[] = self::link($label, route($routeName), self::routeActive($activePattern));
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param  string|list<string>  $patterns
+     */
+    private static function routeActive(string|array $patterns): bool
+    {
+        foreach ((array) $patterns as $pattern) {
+            if (request()->routeIs($pattern)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{label: string, href: string, active: bool}>  $items
+     * @return array{
+     *     key: string,
+     *     label: string,
+     *     icon: string,
+     *     type: 'group'|'link',
+     *     active: bool,
+     *     open: bool,
+     *     items: list<array{label: string, href: string, active: bool}>,
+     *     href?: string
+     * }
+     */
+    private static function group(string $key, string $label, string $icon, array $items): array
+    {
+        if (count($items) === 1) {
+            $only = $items[0];
+
+            return self::leaf($key, $label, $icon, $only['href'], $only['active']);
+        }
+
+        $active = collect($items)->contains(fn (array $item) => $item['active']);
+
+        return [
+            'key' => $key,
+            'label' => $label,
+            'icon' => $icon,
+            'type' => 'group',
+            'active' => $active,
+            'open' => $active,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @return array{key: string, label: string, icon: string, type: 'link', href: string, active: bool, open: bool, items: list<array{label: string, href: string, active: bool}>}
+     */
+    private static function leaf(string $key, string $label, string $icon, string $href, bool $active): array
+    {
+        return [
+            'key' => $key,
+            'label' => $label,
+            'icon' => $icon,
+            'type' => 'link',
+            'href' => $href,
+            'active' => $active,
+            'open' => $active,
+            'items' => [],
+        ];
     }
 
     /**

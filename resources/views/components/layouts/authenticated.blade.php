@@ -2,7 +2,7 @@
     use App\Support\Navigation;
     $account = auth()->user();
     $account?->loadMissing('roles', 'tenant');
-    $navigation = $account ? Navigation::groups($account) : [];
+    $modules = $account ? Navigation::modules($account) : [];
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -18,41 +18,15 @@
     @livewireStyles
 </head>
 <body class="bg-night font-sans text-ink antialiased">
-    <input id="nav-toggle" type="checkbox" class="peer sr-only">
-    <label for="nav-toggle" class="fixed inset-0 z-30 hidden bg-ink/30 peer-checked:block lg:hidden"></label>
-    <aside class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col border-r border-line bg-panel transition peer-checked:translate-x-0 lg:translate-x-0">
-        <div class="flex items-center gap-3 px-5 py-5">
-            <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent text-sm font-semibold text-white">CS</div>
-            <div>
-                <p class="text-sm font-semibold tracking-tight">Cold Storage</p>
-                <p class="text-xs text-muted">Management</p>
-            </div>
-        </div>
-        <nav class="flex-1 space-y-6 overflow-y-auto px-3 pb-6" aria-label="Primary">
-            @foreach ($navigation as $group)
-                <div>
-                    <p class="px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{{ $group['label'] }}</p>
-                    <div class="mt-2 space-y-1">
-                        @foreach ($group['items'] as $item)
-                            <a
-                                href="{{ $item['href'] }}"
-                                @class([
-                                    'block rounded-xl px-3 py-2 text-sm',
-                                    'bg-teal-50 font-medium text-accent' => $item['active'],
-                                    'text-ink hover:bg-panel-2' => ! $item['active'],
-                                ])
-                            >{{ $item['label'] }}</a>
-                        @endforeach
-                    </div>
-                </div>
-            @endforeach
-        </nav>
-    </aside>
+    <input id="nav-toggle" type="checkbox" class="peer sr-only" aria-hidden="true">
+    <label for="nav-toggle" class="fixed inset-0 z-30 hidden bg-ink/30 peer-checked:block lg:hidden" aria-hidden="true"></label>
 
-    <div class="lg:pl-64">
+    <x-sidebar :modules="$modules" />
+
+    <div class="min-h-screen lg:pl-64">
         <header class="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-night/90 px-4 py-3 backdrop-blur sm:px-6">
             <div class="flex items-center gap-3">
-                <label for="nav-toggle" class="btn-ghost px-3 py-2 lg:hidden">Menu</label>
+                <label for="nav-toggle" class="btn-ghost cursor-pointer px-3 py-2 lg:hidden" aria-controls="app-sidebar">Menu</label>
                 <div>
                     <p class="text-sm font-semibold">{{ $title ?? 'Dashboard' }}</p>
                     <p class="text-xs text-muted">{{ $account->tenant?->name ?? 'Platform' }}</p>

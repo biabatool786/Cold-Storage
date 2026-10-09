@@ -34,4 +34,22 @@
     .btn-ghost {
         @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-panel px-4 py-2.5 text-sm font-medium text-ink hover:bg-panel-2;
     }
+
+    .sidebar-module.is-open > .sidebar-module-toggle .sidebar-chevron {
+        transform: rotate(90deg);
+    }
+
+    .sidebar-panel {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows 200ms ease;
+    }
+
+    .sidebar-module.is-open > .sidebar-panel {
+        grid-template-rows: 1fr;
+    }
+
+    .sidebar-panel > div {
+        overflow: hidden;
+    }
 }

@@ -178,6 +178,53 @@ class InventoryDesk
         return $this->ledger($lot, 'receipt', (float) $lot->quantity, 'GRN put-away', $lot::class, $lot->id, null, $lot->slot_id, $actor?->id);
     }
 
+    public function recordDispatchMovement(StorageLot $lot, float $quantity, ?User $actor, string $referenceType, int $referenceId, ?string $reason = null): StockLedgerEntry
+    {
+        abort_unless($quantity > 0 && $quantity <= $lot->availableQuantity() + 0.0001, 422);
+        $before = (float) $lot->quantity;
+        $lot->update([
+            'quantity' => max(0, $before - $quantity),
+            'dispatched_qty' => (float) $lot->dispatched_qty + $quantity,
+        ]);
+        if ((float) $lot->fresh()->quantity <= 0 && $lot->slot_id) {
+            Slot::query()->whereKey($lot->slot_id)->update(['status' => 'available']);
+            $lot->update(['slot_id' => null]);
+        }
+
+        return $this->ledger(
+            $lot->fresh(),
+            'dispatch',
+            -$quantity,
+            $reason ?? 'Outbound dispatch',
+            $referenceType,
+            $referenceId,
+            null,
+            null,
+            $actor?->id,
+        );
+    }
+
+    public function recordReturnMovement(StorageLot $lot, float $quantity, ?User $actor, string $referenceType, int $referenceId, ?string $reason = null): StockLedgerEntry
+    {
+        $lot->update([
+            'quantity' => (float) $lot->quantity + $quantity,
+            'dispatched_qty' => max(0, (float) $lot->dispatched_qty - $quantity),
+            'status' => 'stored',
+        ]);
+
+        return $this->ledger(
+            $lot->fresh(),
+            'return',
+            $quantity,
+            $reason ?? 'Dispatch return',
+            $referenceType,
+            $referenceId,
+            null,
+            null,
+            $actor?->id,
+        );
+    }
+
     /**
      * @return Collection<int, StorageLot>
      */

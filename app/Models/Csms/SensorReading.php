@@ -14,7 +14,25 @@ class SensorReading extends Model implements BelongsToTenant
 {
     use GuardsImmutableRecords, TenantAware;
 
-    protected $fillable = ['tenant_id', 'branch_id', 'chamber_id', 'temperature', 'humidity', 'created_by'];
+    protected $fillable = [
+        'tenant_id', 'branch_id', 'chamber_id', 'sensor_id',
+        'temperature', 'humidity', 'source', 'notes', 'created_by',
+    ];
+
+    public function chamber(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Chamber::class);
+    }
+
+    public function sensor(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(MonitoringSensor::class, 'sensor_id');
+    }
+
+    public function annotations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(MonitoringReadingAnnotation::class, 'sensor_reading_id');
+    }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {

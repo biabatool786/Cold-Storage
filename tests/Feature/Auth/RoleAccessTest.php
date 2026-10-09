@@ -143,17 +143,14 @@ class RoleAccessTest extends TestCase
         $this->actingAs($this->supervisorA)->get('/quality-checks')->assertOk();
         $this->actingAs($this->supervisorA)->get('/invoices')->assertForbidden();
         $this->actingAs($this->supervisorA)->get('/settings')->assertForbidden();
-        $this->actingAs($this->supervisorA)
-            ->post('/monitoring/acknowledge')
-            ->assertRedirect();
+        $this->actingAs($this->supervisorA)->get('/monitoring')->assertOk();
 
         $this->actingAs($this->gatekeeperA)->get('/delivery-orders')->assertOk();
         $this->actingAs($this->gatekeeperA)->get('/invoices')->assertForbidden();
         $this->actingAs($this->gatekeeperA)->get('/lots')->assertForbidden();
         $this->actingAs($this->gatekeeperA)->get('/users')->assertForbidden();
-        $this->actingAs($this->gatekeeperA)
-            ->post('/monitoring/acknowledge')
-            ->assertForbidden();
+        $this->actingAs($this->gatekeeperA)->get('/monitoring/history')->assertOk();
+        $this->actingAs($this->gatekeeperA)->get('/monitoring')->assertRedirect(route('monitoring.history'));
     }
 
     private function tenant(string $name, string $slug): Tenant

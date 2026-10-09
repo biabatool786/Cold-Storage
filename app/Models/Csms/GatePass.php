@@ -10,11 +10,17 @@ class GatePass extends Model implements BelongsToTenant
 {
     use ColdStoreRecord;
 
-    protected $fillable = ['tenant_id', 'branch_id', 'delivery_order_id', 'status', 'code', 'created_by', 'released_at'];
+    protected $fillable = [
+        'tenant_id', 'branch_id', 'delivery_order_id', 'status', 'code', 'created_by',
+        'verified_by', 'verified_at', 'released_at',
+    ];
 
     protected function casts(): array
     {
-        return ['released_at' => 'datetime'];
+        return [
+            'released_at' => 'datetime',
+            'verified_at' => 'datetime',
+        ];
     }
 
     public function deliveryOrder()

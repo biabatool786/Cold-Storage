@@ -142,11 +142,6 @@ class MonitoringDesk
         abort_unless($this->branches->allows($actor, $branch), 403);
     }
 
-    public function branchOf(int $branchId): Branch
-    {
-        return Branch::query()->findOrFail($branchId);
-    }
-
     public function assertBranchAccess(User $actor, int $branchId): Branch
     {
         $branch = Branch::query()->find($branchId);

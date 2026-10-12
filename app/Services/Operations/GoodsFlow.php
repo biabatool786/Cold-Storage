@@ -24,7 +24,10 @@ use App\Services\Authorization\FinancialDocumentGuard;
 use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
 use App\Services\Dispatch\DispatchDesk;
+use App\Services\Billing\BillingDesk;
 use App\Services\Monitoring\MonitoringDesk;
+use App\Services\Accounts\AccountsDesk;
+use App\Services\Receivables\ReceivablesDesk;
 use App\Services\Receiving\ReceivingDesk;
 use App\Services\Weighbridge\WeighbridgeDesk;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -45,6 +48,9 @@ class GoodsFlow
         private readonly ReceivingDesk $receiving,
         private readonly DispatchDesk $dispatch,
         private readonly MonitoringDesk $monitoring,
+        private readonly BillingDesk $billing,
+        private readonly ReceivablesDesk $receivables,
+        private readonly AccountsDesk $accounts,
     ) {}
 
     public function branchFor(User $actor, Branch $branch): Branch
@@ -128,45 +134,17 @@ class GoodsFlow
 
     public function postInvoice(User $actor, StorageInvoice $invoice): void
     {
-        abort_unless($actor->hasPermission('billing.execute'), 403);
-        $this->financialDocuments->assertMutable($invoice->status);
-        $invoice->update(['status' => 'posted']);
-        $this->audit->record('invoice.posted', $invoice, [], $invoice->tenant_id, [
-            'module' => 'billing',
-            'branch_id' => $invoice->branch_id,
-            'new' => ['status' => 'posted'],
-        ]);
+        $this->billing->post($actor, $invoice);
     }
 
     public function postPayment(User $actor, StoragePayment $payment): void
     {
-        abort_unless($actor->hasPermission('payments.execute'), 403);
-        $this->financialDocuments->assertMutable($payment->status);
-        $payment->update(['status' => 'posted']);
-        $invoice = $payment->invoice;
-        $paid = (float) $invoice->payments()->where('status', 'posted')->sum('amount');
-        if ($invoice->status === 'posted' && $paid >= (float) $invoice->amount && $invoice->delivery_order_id) {
-            $lotId = DeliveryOrder::query()->whereKey($invoice->delivery_order_id)->value('storage_lot_id');
-            if ($lotId) {
-                StorageLot::query()->whereKey($lotId)->update(['status' => 'closed']);
-            }
-        }
-        $this->audit->record('payment.posted', $payment, [], $payment->tenant_id, [
-            'module' => 'payments',
-            'branch_id' => $payment->branch_id,
-            'new' => ['status' => 'posted'],
-        ]);
+        $this->receivables->postDraft($actor, $payment);
     }
 
     public function approveExpense(User $actor, OperatingExpense $expense): void
     {
-        $this->guardPending($actor, $expense, 'expenses.approve');
-        $this->limits->assertCanApprove($actor, 'expense', $expense->amount);
-        $expense->update(['status' => 'approved', 'approved_by' => $actor->id]);
-        $this->audit->record('expense.approved', $expense, [], $expense->tenant_id, [
-            'module' => 'expenses',
-            'branch_id' => $expense->branch_id,
-        ]);
+        $this->accounts->approveExpense($actor, $expense, true);
     }
 
     public function recordReading(User $actor, Chamber $chamber, float $temperature, ?float $humidity): SensorReading

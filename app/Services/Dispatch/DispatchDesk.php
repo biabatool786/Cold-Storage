@@ -11,9 +11,7 @@ use App\Models\Csms\DeliveryPickLine;
 use App\Models\Csms\DispatchReturn;
 use App\Models\Csms\GatePass;
 use App\Models\Csms\Slot;
-use App\Models\Csms\StorageInvoice;
 use App\Models\Csms\StorageLot;
-use App\Models\Csms\StoragePayment;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Authorization\ApprovalLimitEvaluator;
@@ -21,6 +19,7 @@ use App\Services\Authorization\BranchAccess;
 use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
 use App\Services\Inventory\InventoryDesk;
+use App\Services\Receivables\ReceivablesDesk;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -34,6 +33,7 @@ class DispatchDesk
         private readonly ReasonRequirement $reasons,
         private readonly ApprovalLimitEvaluator $limits,
         private readonly InventoryDesk $inventory,
+        private readonly ReceivablesDesk $receivables,
     ) {}
 
     public function canCreate(User $user): bool
@@ -167,22 +167,24 @@ class DispatchDesk
     }
 
     /**
-     * @return array{dues: float, stock_ok: bool, credit_ok: bool, available: float, credit_limit: float}
+     * @return array{dues: float, stock_ok: bool, credit_ok: bool, customer_ok: bool, available: float, credit_limit: float}
      */
     public function runChecks(StorageLot $lot, float $quantity): array
     {
-        $dues = $this->customerDues((int) $lot->customer_id);
+        $dues = $this->receivables->customerOutstanding((int) $lot->customer_id);
         $customer = Customer::query()->find($lot->customer_id);
         $available = $lot->availableQuantity();
         $creditLimit = (float) ($customer?->credit_limit ?? 0);
         $stockOk = $quantity > 0 && $quantity <= $available && $lot->status === 'stored'
             && ! in_array($lot->hold_status, ['hold', 'quarantine'], true);
         $creditOk = $creditLimit <= 0 || $dues <= $creditLimit;
+        $customerOk = $customer === null || ! $this->receivables->customerOnDuesHold($customer);
 
         return [
             'dues' => $dues,
             'stock_ok' => $stockOk,
             'credit_ok' => $creditOk,
+            'customer_ok' => $customerOk,
             'available' => $available,
             'credit_limit' => $creditLimit,
         ];
@@ -294,6 +296,7 @@ class DispatchDesk
 
         $checks = $this->runChecks($order->lot, (float) $order->quantity);
         abort_unless($checks['stock_ok'], 422);
+        abort_unless($checks['customer_ok'], 422);
         $order->update([
             'dues_amount' => $checks['dues'],
             'stock_ok' => $checks['stock_ok'],
@@ -727,17 +730,6 @@ class DispatchDesk
                 $return->reason,
             );
         }
-    }
-
-    private function customerDues(int $customerId): float
-    {
-        $invoiced = (float) StorageInvoice::query()->where('customer_id', $customerId)->where('status', 'posted')->sum('amount');
-        $paid = (float) StoragePayment::query()
-            ->where('status', 'posted')
-            ->whereIn('storage_invoice_id', StorageInvoice::query()->where('customer_id', $customerId)->pluck('id'))
-            ->sum('amount');
-
-        return max(0, $invoiced - $paid);
     }
 
     private function nextNumber(int $tenantId, int $branchId): string

@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\PermissionName;
+use App\Enums\RoleName;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -144,22 +145,134 @@ class Navigation
 
         $finance = self::collect($user, [
             ['Invoices', 'invoices.index', 'invoices.*', 'billing.view'],
-            ['Payments', 'payments.index', 'payments.*', 'payments.view'],
-            ['Expenses', 'expenses.index', 'expenses.*', 'expenses.view'],
+            ['Tariffs & rates', 'billing.tariffs', 'billing.tariffs*', 'billing.view'],
+            ['Accrued charges', 'billing.accrued', 'billing.accrued', 'billing.view'],
+            ['Bulk invoice run', 'billing.bulk', 'billing.bulk*', 'billing.view'],
+            ['Billing settings', 'billing.settings', 'billing.settings*', 'billing.view'],
+            ['Payments', 'payments.index', 'payments.index', 'payments.view'],
+            ['Record payment', 'payments.create', 'payments.create', 'payments.create'],
+            ['Deposits', 'payments.deposits', 'payments.deposits', 'payments.view'],
+            ['Customer ledger', 'payments.ledger', 'payments.ledger*', 'payments.view'],
+            ['Receivable aging', 'payments.aging', 'payments.aging*', 'payments.view'],
+            ['Bad debt', 'payments.write-offs', 'payments.write-offs*', 'payments.view'],
+            ['Stock loans', 'payments.loans', 'payments.loans*', 'payments.view'],
+            ['Expenses', 'expenses.index', 'expenses.index', 'expenses.view'],
+            ['Vendors', 'vendors.index', 'vendors.*', 'vendors.view'],
+            ['Petty cash', 'accounts.petty-cash', 'accounts.petty-cash*', 'accounts.view'],
+            ['Bank reconciliation', 'accounts.bank', 'accounts.bank*', 'accounts.execute'],
+            ['Day / cash book', 'accounts.day-book', 'accounts.day-book*', 'accounts.view'],
+            ['Profit & loss', 'accounts.profit-loss', 'accounts.profit-loss*', 'accounts.view'],
+            ['Accounting export', 'accounts.export', 'accounts.export*', 'accounts.execute'],
+            ['Period close', 'accounts.periods', 'accounts.periods*', 'accounts.view'],
         ]);
+        // Exact accounts matrix: day book ≠ manager; P&L/petty ≠ supervisor; bank/export = execute roles.
+        if ($user->hasRole(RoleName::Supervisor) && ! $user->isSuperAdmin()) {
+            $finance = array_values(array_filter(
+                $finance,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Petty cash', 'Bank reconciliation', 'Profit & loss', 'Accounting export', 'Period close', 'Vendors',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Manager) && ! $user->isSuperAdmin()) {
+            $finance = array_values(array_filter(
+                $finance,
+                fn (array $item): bool => ! in_array($item['label'], ['Day / cash book', 'Bank reconciliation', 'Accounting export', 'Period close'], true)
+            ));
+        }
         if ($finance !== []) {
             $modules[] = self::group('finance', 'Finance', 'currency', $finance);
         }
 
+        $equipment = self::collect($user, [
+            ['Assets', 'assets.index', 'assets.*', 'maintenance.view'],
+            ['Preventive maintenance', 'maintenance.schedules', 'maintenance.schedules*', 'maintenance.view'],
+            ['Breakdown tickets', 'maintenance.tickets', 'maintenance.tickets*', 'maintenance.create'],
+            ['Work orders', 'maintenance.work-orders', 'maintenance.work-orders*', 'maintenance.view'],
+            ['Spare parts', 'maintenance.spares', 'maintenance.spares*', 'maintenance.view'],
+            ['AMC / Warranty', 'maintenance.contracts', 'maintenance.contracts*', 'maintenance.view'],
+            ['Downtime & cost history', 'maintenance.history', 'maintenance.history*', 'maintenance.view'],
+        ]);
+        if ($user->hasRole(RoleName::Gatekeeper) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $equipment = array_values(array_filter(
+                $equipment,
+                fn (array $item): bool => $item['label'] === 'Breakdown tickets'
+            ));
+        }
+        if ($user->hasRole(RoleName::Accountant) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $equipment = array_values(array_filter(
+                $equipment,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Assets', 'Spare parts', 'AMC / Warranty', 'Downtime & cost history',
+                ], true)
+            ));
+        }
+        if ($equipment !== []) {
+            $modules[] = self::group('equipment', 'Equipment & Maintenance', 'wrench', $equipment);
+        }
+
+        $energy = self::collect($user, [
+            ['Electricity meter readings', 'energy.readings', 'energy.readings*', 'energy.view'],
+            ['Generator logs', 'energy.generators', 'energy.generators*', 'energy.view'],
+            ['Power-cut & backup logs', 'energy.power-events', 'energy.power-events*', 'energy.create'],
+            ['Meter-to-chamber mapping', 'energy.mappings', 'energy.mappings*', 'energy.edit'],
+            ['Consumption & cost reports', 'energy.reports', 'energy.reports*', 'energy.view'],
+            ['Peak load alerts', 'energy.peak-alerts', 'energy.peak-alerts*', 'energy.edit'],
+            ['Energy billing allocation', 'energy.allocations', 'energy.allocations*', 'energy.edit'],
+        ]);
+        if ($user->hasRole(RoleName::Gatekeeper) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Supervisor])) {
+            $energy = array_values(array_filter(
+                $energy,
+                fn (array $item): bool => $item['label'] === 'Power-cut & backup logs'
+            ));
+        }
+        if ($user->hasRole(RoleName::Admin) && ! $user->isSuperAdmin()) {
+            $energy = array_values(array_filter(
+                $energy,
+                fn (array $item): bool => $item['label'] !== 'Energy billing allocation'
+            ));
+        }
+        if ($user->hasRole(RoleName::Manager) && ! $user->isSuperAdmin() && ! $user->hasRole(RoleName::Admin)) {
+            $energy = array_values(array_filter(
+                $energy,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Meter-to-chamber mapping', 'Peak load alerts', 'Energy billing allocation',
+                ], true)
+            ));
+            if (Route::has('energy.peak-alerts')) {
+                $energy[] = self::link('Peak load alerts', route('energy.peak-alerts'), request()->routeIs('energy.peak-alerts*'));
+            }
+            if (Route::has('energy.allocations')) {
+                $energy[] = self::link('Energy billing allocation', route('energy.allocations'), request()->routeIs('energy.allocations*'));
+            }
+        }
+        if ($user->hasRole(RoleName::Supervisor) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $energy = array_values(array_filter(
+                $energy,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Meter-to-chamber mapping', 'Peak load alerts', 'Energy billing allocation',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Accountant) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $energy = array_values(array_filter(
+                $energy,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Consumption & cost reports', 'Energy billing allocation',
+                ], true)
+            ));
+        }
+        if ($energy !== []) {
+            $modules[] = self::group('energy', 'Energy & Power', 'thermometer', $energy);
+        }
+
         $operations = self::collect($user, [
-            ['Equipment', 'assets.index', 'assets.*', 'maintenance.view'],
-            ['Energy', 'energy.index', 'energy.*', 'energy.view'],
             ['Labor', 'labor.index', 'labor.*', 'labor.view'],
             ['Quality', 'quality-checks.index', 'quality-checks.*', 'quality.view'],
             ['Notices', 'notices.index', 'notices.*', 'notifications.view'],
         ]);
         if ($operations !== []) {
-            $modules[] = self::group('operations', 'Operations', 'wrench', $operations);
+            $modules[] = self::group('operations', 'Operations', 'layers', $operations);
         }
 
         $security = self::collect($user, [

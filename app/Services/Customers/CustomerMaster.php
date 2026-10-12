@@ -9,13 +9,12 @@ use App\Models\Csms\Customer;
 use App\Models\Csms\CustomerDocument;
 use App\Models\Csms\CustomerNote;
 use App\Models\Csms\RateAgreement;
-use App\Models\Csms\StorageInvoice;
-use App\Models\Csms\StoragePayment;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Authorization\BranchAccess;
 use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
+use App\Services\Receivables\ReceivablesDesk;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +26,7 @@ class CustomerMaster
         private readonly MakerChecker $makerChecker,
         private readonly ReasonRequirement $reasons,
         private readonly BranchAccess $branches,
+        private readonly ReceivablesDesk $receivables,
     ) {}
 
     public function seesNameOnly(User $user): bool
@@ -66,14 +66,14 @@ class CustomerMaster
 
     public function canHold(User $user): bool
     {
+        // Dues hold: SA / Manager only (payments matrix). Legacy customer hold UI uses same gate.
         return $user->hasPermission('customers.execute')
-            && ($user->isSuperAdmin() || $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Accountant]));
+            && ($user->isSuperAdmin() || $user->hasRole(RoleName::Manager));
     }
 
     public function canRemoveHold(User $user): bool
     {
-        return $user->hasPermission('customers.execute')
-            && ($user->isSuperAdmin() || $user->hasAnyRole([RoleName::Manager, RoleName::Accountant]));
+        return $this->canHold($user);
     }
 
     public function canNote(User $user): bool
@@ -84,7 +84,9 @@ class CustomerMaster
 
     public function canMessage(User $user): bool
     {
-        return $this->canHold($user);
+        // Messaging (e.g. GRN send) stays available to SA/Admin/Manager/Accountant; dues holds are narrower.
+        return $user->hasPermission('customers.execute')
+            && ($user->isSuperAdmin() || $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Accountant]));
     }
 
     public function canImport(User $user): bool
@@ -244,13 +246,7 @@ class CustomerMaster
 
     public function paymentsCleared(Customer $customer): bool
     {
-        $invoiced = (float) StorageInvoice::query()->where('customer_id', $customer->id)->where('status', 'posted')->sum('amount');
-        $paid = (float) StoragePayment::query()->where('status', 'posted')->whereIn(
-            'storage_invoice_id',
-            StorageInvoice::query()->where('customer_id', $customer->id)->pluck('id'),
-        )->sum('amount');
-
-        return $paid + 0.009 >= $invoiced;
+        return $this->receivables->paymentsCleared($customer);
     }
 
     public function storeDocument(User $actor, Customer $customer, UploadedFile $file): void

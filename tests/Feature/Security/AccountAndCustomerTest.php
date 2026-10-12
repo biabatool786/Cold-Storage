@@ -194,7 +194,7 @@ class AccountAndCustomerTest extends TestCase
             'status' => 'posted',
             'created_by' => $this->accountantA->id,
         ]);
-        $this->actingAs($this->accountantA)->post('/customers/'.$customer->id.'/release', ['reason' => 'Paid'])->assertSessionHasErrors('status');
+        $this->actingAs($this->accountantA)->post('/customers/'.$customer->id.'/release', ['reason' => 'Paid'])->assertForbidden();
         $this->actingAs($this->adminA)->post('/customers/'.$customer->id.'/release', ['reason' => 'Clear'])->assertForbidden();
         $this->actingAs($this->managerA)->post('/customers/'.$customer->id.'/release', ['reason' => 'Cleared by manager'])->assertRedirect();
 

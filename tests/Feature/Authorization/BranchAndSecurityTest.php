@@ -197,7 +197,9 @@ class BranchAndSecurityTest extends TestCase
         $this->assertFalse($this->gatekeeperA->hasPermission('billing.view'));
         $this->assertFalse($this->gatekeeperA->hasPermission('payments.view'));
         $this->assertFalse($this->supervisorA->hasPermission('billing.view'));
-        $this->assertFalse($this->supervisorA->hasPermission('payments.view'));
+        $this->assertTrue($this->supervisorA->hasPermission('payments.view'));
+        $this->assertFalse($this->supervisorA->hasPermission('payments.print'));
+        $this->assertFalse($this->adminA->hasPermission('payments.print'));
 
         $this->actingAs($this->gatekeeperA)->get('/invoices')->assertForbidden();
         $this->actingAs($this->supervisorA)->get('/invoices')->assertForbidden();

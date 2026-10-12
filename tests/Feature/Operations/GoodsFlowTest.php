@@ -178,7 +178,7 @@ class GoodsFlowTest extends TestCase
         $this->actingAs($this->accountantA)->post('/invoices/'.$invoice->id.'/post')->assertForbidden();
         $this->actingAs($this->accountantA)->post('/invoices/'.$invoice->id.'/payments', ['amount' => 250])->assertRedirect();
         $payment = \App\Models\Csms\StoragePayment::query()->firstOrFail();
-        $this->actingAs($this->accountantA)->post('/payments/'.$payment->id.'/post')->assertRedirect();
+        $this->assertSame('posted', $payment->status);
         $this->assertSame('closed', $lot->fresh()->status);
 
         $this->actingAs($this->supervisorA)->post('/monitoring/readings', [

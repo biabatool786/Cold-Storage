@@ -19,6 +19,7 @@ use App\Services\Authorization\BranchAccess;
 use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
 use App\Services\Inventory\InventoryDesk;
+use App\Services\Notifications\OperationalAlertHooks;
 use App\Services\Receivables\ReceivablesDesk;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -34,6 +35,7 @@ class DispatchDesk
         private readonly ApprovalLimitEvaluator $limits,
         private readonly InventoryDesk $inventory,
         private readonly ReceivablesDesk $receivables,
+        private readonly OperationalAlertHooks $operationalAlerts,
     ) {}
 
     public function canCreate(User $user): bool
@@ -199,7 +201,10 @@ class DispatchDesk
         abort_unless(in_array($pickMode, ['fifo', 'fefo'], true), 422);
 
         $checks = $this->runChecks($lot, $quantity);
-        abort_unless($checks['stock_ok'], 422);
+        if (! $checks['stock_ok']) {
+            $this->operationalAlerts->lowStockDispatch($lot, $quantity, 'delivery open');
+            abort(422);
+        }
 
         $order = DeliveryOrder::query()->create([
             'tenant_id' => $lot->tenant_id,
@@ -225,6 +230,16 @@ class DispatchDesk
             'new' => ['dues_amount' => $order->dues_amount, 'stock_ok' => $checks['stock_ok'], 'credit_ok' => $checks['credit_ok']],
         ]);
 
+        if ($submit) {
+            $this->operationalAlerts->pendingApproval(
+                $order,
+                (int) $order->tenant_id,
+                (int) $order->branch_id,
+                'Delivery order',
+                'Delivery order '.$order->number.' awaits approval (qty '.round((float) $order->quantity, 3).').'
+            );
+        }
+
         return $order;
     }
 
@@ -234,8 +249,12 @@ class DispatchDesk
         $this->guardOrder($actor, $order);
         $qty = isset($data['quantity']) ? (float) $data['quantity'] : (float) $order->quantity;
         $checks = $this->runChecks($order->lot, $qty);
-        abort_unless($checks['stock_ok'], 422);
+        if (! $checks['stock_ok']) {
+            $this->operationalAlerts->lowStockDispatch($order->lot, $qty, 'delivery draft '.$order->number);
+            abort(422);
+        }
 
+        $wasPending = $order->status === 'pending';
         $order->update([
             'quantity' => $qty,
             'remaining_qty' => $qty,
@@ -246,8 +265,18 @@ class DispatchDesk
             'has_dues_flag' => $checks['dues'] > 0,
             'status' => ! empty($data['submit']) ? 'pending' : $order->status,
         ]);
+        $fresh = $order->fresh();
+        if (! $wasPending && $fresh->status === 'pending') {
+            $this->operationalAlerts->pendingApproval(
+                $fresh,
+                (int) $fresh->tenant_id,
+                (int) $fresh->branch_id,
+                'Delivery order',
+                'Delivery order '.$fresh->number.' awaits approval (qty '.round((float) $fresh->quantity, 3).').'
+            );
+        }
 
-        return $order->fresh();
+        return $fresh;
     }
 
     public function editApproved(User $actor, DeliveryOrder $order, array $data, string $reason): DeliveryOrder
@@ -295,7 +324,10 @@ class DispatchDesk
         $this->makerChecker->assertCanApprove($actor, $order->created_by);
 
         $checks = $this->runChecks($order->lot, (float) $order->quantity);
-        abort_unless($checks['stock_ok'], 422);
+        if (! $checks['stock_ok']) {
+            $this->operationalAlerts->lowStockDispatch($order->lot, (float) $order->quantity, 'delivery approve '.$order->number);
+            abort(422);
+        }
         abort_unless($checks['customer_ok'], 422);
         $order->update([
             'dues_amount' => $checks['dues'],
@@ -407,6 +439,9 @@ class DispatchDesk
         }
 
         if ($remaining > 0.0001) {
+            if ($primary) {
+                $this->operationalAlerts->lowStockDispatch($primary, (float) $order->quantity, 'pick list '.$order->number);
+            }
             throw ValidationException::withMessages(['quantity' => 'Insufficient eligible stock for the pick list.']);
         }
 

@@ -266,13 +266,164 @@ class Navigation
             $modules[] = self::group('energy', 'Energy & Power', 'thermometer', $energy);
         }
 
-        $operations = self::collect($user, [
-            ['Labor', 'labor.index', 'labor.*', 'labor.view'],
-            ['Quality', 'quality-checks.index', 'quality-checks.*', 'quality.view'],
-            ['Notices', 'notices.index', 'notices.*', 'notifications.view'],
+        $labor = self::collect($user, [
+            ['Employee / labor master', 'labor.employees', 'labor.employees*', 'labor.view'],
+            ['Attendance', 'labor.attendance', 'labor.attendance*', 'labor.execute'],
+            ['Shift scheduling', 'labor.shifts', 'labor.shifts*', 'labor.create'],
+            ['Loading / unloading tasks', 'labor.tasks', 'labor.tasks*', 'labor.execute'],
+            ['Work done & wage sheets', 'labor.wage-sheets', 'labor.wage-sheets*', 'labor.create'],
+            ['Overtime', 'labor.overtime', 'labor.overtime*', 'labor.view'],
+            ['Labor advances', 'labor.advances', 'labor.advances*', 'labor.create'],
+            ['Payroll', 'labor.payroll', 'labor.payroll*', 'labor.execute'],
+            ['PPE & safety', 'labor.ppe', 'labor.ppe*', 'labor.create'],
+            ['Leave management', 'labor.leave', 'labor.leave*', 'labor.create'],
         ]);
-        if ($operations !== []) {
-            $modules[] = self::group('operations', 'Operations', 'layers', $operations);
+        if ($user->hasRole(RoleName::Gatekeeper) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Supervisor])) {
+            $labor = array_values(array_filter(
+                $labor,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Attendance', 'Shift scheduling', 'Overtime', 'Leave management',
+                ], true)
+            ));
+            if (Route::has('labor.overtime') && ! collect($labor)->contains(fn ($i) => $i['label'] === 'Overtime')) {
+                $labor[] = self::link('Overtime', route('labor.overtime'), request()->routeIs('labor.overtime*'));
+            }
+            if (Route::has('labor.leave') && ! collect($labor)->contains(fn ($i) => $i['label'] === 'Leave management')) {
+                $labor[] = self::link('Leave management', route('labor.leave'), request()->routeIs('labor.leave*'));
+            }
+            if (Route::has('labor.shifts') && ! collect($labor)->contains(fn ($i) => $i['label'] === 'Shift scheduling')) {
+                $labor[] = self::link('Shift scheduling', route('labor.shifts'), request()->routeIs('labor.shifts*'));
+            }
+        }
+        if ($user->hasRole(RoleName::Accountant) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $labor = array_values(array_filter(
+                $labor,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Employee / labor master', 'Overtime', 'Labor advances', 'Payroll',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Admin) && ! $user->isSuperAdmin()) {
+            $labor = array_values(array_filter(
+                $labor,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Loading / unloading tasks', 'Work done & wage sheets', 'Labor advances', 'Payroll', 'Leave management',
+                ], true)
+            ));
+            if (Route::has('labor.overtime') && ! collect($labor)->contains(fn ($i) => $i['label'] === 'Overtime')) {
+                $labor[] = self::link('Overtime', route('labor.overtime'), request()->routeIs('labor.overtime*'));
+            }
+        }
+        if ($user->hasRole(RoleName::Manager) && ! $user->isSuperAdmin() && ! $user->hasRole(RoleName::Admin)) {
+            $labor = array_values(array_filter(
+                $labor,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Shift scheduling', 'Overtime',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Supervisor) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $labor = array_values(array_filter(
+                $labor,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Payroll', 'Work done & wage sheets',
+                ], true)
+            ));
+        }
+        if ($labor !== []) {
+            $modules[] = self::group('labor', 'Labor & Attendance', 'users', $labor);
+        }
+
+        $quality = self::collect($user, [
+            ['Inspection templates', 'quality.templates', 'quality.templates*', 'quality.edit'],
+            ['Inspections', 'quality.inspections', 'quality.inspections*', 'quality.execute'],
+            ['NCR & corrective actions', 'quality.ncrs', 'quality.ncrs*', 'quality.create'],
+            ['Pest control & sanitation', 'quality.pest', 'quality.pest*', 'quality.create'],
+            ['Lot traceability', 'quality.traceability', 'quality.traceability*', 'quality.view'],
+            ['Certificates & licenses', 'quality.certificates', 'quality.certificates*', 'quality.view'],
+            ['Incidents & accidents', 'quality.incidents', 'quality.incidents*', 'quality.create'],
+            ['Insurance policies', 'quality.policies', 'quality.policies*', 'quality.view'],
+            ['Insurance claims', 'quality.claims', 'quality.claims*', 'quality.create'],
+            ['Gas & fire safety logs', 'quality.safety', 'quality.safety*', 'quality.create'],
+            ['SOP library', 'quality.sops', 'quality.sops*', 'quality.view'],
+        ]);
+        if ($user->hasRole(RoleName::Gatekeeper) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Supervisor])) {
+            $quality = array_values(array_filter(
+                $quality,
+                fn (array $item): bool => in_array($item['label'], [
+                    'NCR & corrective actions', 'Incidents & accidents', 'Gas & fire safety logs', 'SOP library',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Accountant) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $quality = array_values(array_filter(
+                $quality,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Lot traceability', 'Certificates & licenses', 'Insurance policies', 'Insurance claims', 'SOP library',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Admin) && ! $user->isSuperAdmin()) {
+            $quality = array_values(array_filter(
+                $quality,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Inspections', 'Insurance claims',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Supervisor) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $quality = array_values(array_filter(
+                $quality,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Inspection templates', 'Insurance claims',
+                ], true)
+            ));
+        }
+        if ($quality !== []) {
+            $modules[] = self::group('quality', 'Quality, Safety & Compliance', 'shield', $quality);
+        }
+
+        $notifications = self::collect($user, [
+            ['Notification Dashboard', 'notifications.dashboard', 'notifications.dashboard', 'notifications.view'],
+            ['Message Templates', 'notifications.templates', 'notifications.templates*', 'notifications.view'],
+            ['Gateway Settings', 'notifications.gateways', 'notifications.gateways*', 'notifications.edit'],
+            ['Role Alert Preferences', 'notifications.preferences', 'notifications.preferences*', 'notifications.edit'],
+            ['Customer Message', 'notifications.compose', 'notifications.compose*', 'notifications.execute'],
+            ['Staff Announcements', 'notifications.announcements', 'notifications.announcements*', 'notifications.execute'],
+            ['Message Log', 'notifications.logs', 'notifications.logs*', 'notifications.view'],
+        ]);
+        if ($user->hasRole(RoleName::Gatekeeper) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager, RoleName::Supervisor, RoleName::Accountant])) {
+            $notifications = array_values(array_filter(
+                $notifications,
+                fn (array $item): bool => $item['label'] === 'Notification Dashboard'
+            ));
+        }
+        if ($user->hasRole(RoleName::Accountant) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $notifications = array_values(array_filter(
+                $notifications,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Notification Dashboard', 'Customer Message', 'Message Log',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Supervisor) && ! $user->isSuperAdmin() && ! $user->hasAnyRole([RoleName::Admin, RoleName::Manager])) {
+            $notifications = array_values(array_filter(
+                $notifications,
+                fn (array $item): bool => in_array($item['label'], [
+                    'Notification Dashboard', 'Message Templates',
+                ], true)
+            ));
+        }
+        if ($user->hasRole(RoleName::Manager) && ! $user->isSuperAdmin() && ! $user->hasRole(RoleName::Admin)) {
+            $notifications = array_values(array_filter(
+                $notifications,
+                fn (array $item): bool => ! in_array($item['label'], [
+                    'Gateway Settings', 'Role Alert Preferences',
+                ], true)
+            ));
+        }
+        if ($notifications !== []) {
+            $modules[] = self::group('notifications', 'Notifications & Communication', 'bell', $notifications);
         }
 
         $security = self::collect($user, [

@@ -18,6 +18,8 @@ class ApprovalLimitSeeder extends Seeder
             ['weight_tolerance', 'Weight correction tolerance', '2.00', 'percent'],
             ['work_order_cost', 'Work-order cost approval', '5000.00', 'amount'],
             ['energy_allocation', 'Energy billing allocation', '10000.00', 'amount'],
+            ['wage_advance', 'Labor advance approval', '5000.00', 'amount'],
+            ['wage_sheet', 'Wage sheet approval', '50000.00', 'amount'],
         ];
 
         foreach ($limits as [$code, $name, $limit, $unit]) {

@@ -21,6 +21,9 @@ use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\EnergyController;
+use App\Http\Controllers\LaborController;
+use App\Http\Controllers\QualityController;
+use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\LoginHistoryController;
@@ -468,10 +471,118 @@ Route::middleware(['auth', 'active', 'session.timeout', 'ip.allowlist'])->group(
     Route::get('/energy/allocations', [EnergyController::class, 'allocations'])->name('energy.allocations');
     Route::post('/branches/{branch}/energy/allocations', [EnergyController::class, 'storeAllocation'])->name('energy.allocations.store');
     Route::post('/energy/allocations/{energy_cost_allocation}/decide', [EnergyController::class, 'decideAllocation'])->name('energy.allocations.decide');
-    Route::get('/labor', [CsmsController::class, 'labor'])->name('labor.index');
-    Route::post('/branches/{branch}/labor', [CsmsController::class, 'storeLabor'])->name('labor.store');
-    Route::get('/quality-checks', [CsmsController::class, 'quality'])->name('quality-checks.index');
-    Route::post('/branches/{branch}/quality-checks', [CsmsController::class, 'storeQuality'])->name('quality.store');
-    Route::get('/notices', [CsmsController::class, 'notices'])->name('notices.index');
-    Route::post('/branches/{branch}/notices', [CsmsController::class, 'storeNotice'])->name('notifications.store');
+    Route::get('/labor', function () {
+        $user = request()->user();
+        $desk = app(\App\Services\Labor\LaborDesk::class);
+        if ($desk->canViewEmployees($user) || $desk->canCreateEmployee($user)) {
+            return redirect()->route('labor.employees');
+        }
+        if ($desk->canMarkAttendance($user)) {
+            return redirect()->route('labor.attendance');
+        }
+        if ($desk->canExecutePayroll($user)) {
+            return redirect()->route('labor.payroll');
+        }
+        if ($desk->canViewOvertime($user)) {
+            return redirect()->route('labor.overtime');
+        }
+        abort(403);
+    })->name('labor.index');
+    Route::get('/labor/employees', [LaborController::class, 'employees'])->name('labor.employees');
+    Route::post('/branches/{branch}/labor/employees', [LaborController::class, 'storeEmployee'])->name('labor.employees.store');
+    Route::get('/labor/employees/{labor_employee}', [LaborController::class, 'showEmployee'])->name('labor.employees.show');
+    Route::post('/labor/employees/{labor_employee}/wage-rates', [LaborController::class, 'storeWageRate'])->name('labor.wage-rates.store');
+    Route::post('/labor/wage-rates/{labor_wage_rate}/decide', [LaborController::class, 'decideWageRate'])->name('labor.wage-rates.decide');
+    Route::get('/labor/attendance', [LaborController::class, 'attendance'])->name('labor.attendance');
+    Route::post('/labor/attendance', [LaborController::class, 'storeAttendance'])->name('labor.attendance.store');
+    Route::post('/labor/attendance/{labor_attendance}/correct', [LaborController::class, 'correctAttendance'])->name('labor.attendance.correct');
+    Route::get('/labor/shifts', [LaborController::class, 'shifts'])->name('labor.shifts');
+    Route::post('/branches/{branch}/labor/shifts', [LaborController::class, 'storeShift'])->name('labor.shifts.store');
+    Route::get('/labor/tasks', [LaborController::class, 'tasks'])->name('labor.tasks');
+    Route::post('/branches/{branch}/labor/tasks', [LaborController::class, 'storeTask'])->name('labor.tasks.store');
+    Route::post('/labor/work', [LaborController::class, 'storeWork'])->name('labor.work.store');
+    Route::get('/labor/wage-sheets', [LaborController::class, 'wageSheets'])->name('labor.wage-sheets');
+    Route::post('/branches/{branch}/labor/wage-sheets', [LaborController::class, 'storeWageSheet'])->name('labor.wage-sheets.store');
+    Route::post('/labor/wage-sheets/{labor_wage_sheet}/decide', [LaborController::class, 'decideWageSheet'])->name('labor.wage-sheets.decide');
+    Route::get('/labor/overtime', [LaborController::class, 'overtime'])->name('labor.overtime');
+    Route::post('/labor/overtime', [LaborController::class, 'storeOvertime'])->name('labor.overtime.store');
+    Route::post('/labor/overtime/{labor_overtime}/decide', [LaborController::class, 'decideOvertime'])->name('labor.overtime.decide');
+    Route::get('/labor/advances', [LaborController::class, 'advances'])->name('labor.advances');
+    Route::post('/labor/advances', [LaborController::class, 'storeAdvance'])->name('labor.advances.store');
+    Route::post('/labor/advances/{labor_advance}/decide', [LaborController::class, 'decideAdvance'])->name('labor.advances.decide');
+    Route::post('/labor/advances/{labor_advance}/pay', [LaborController::class, 'payAdvance'])->name('labor.advances.pay');
+    Route::get('/labor/payroll', [LaborController::class, 'payroll'])->name('labor.payroll');
+    Route::post('/branches/{branch}/labor/payroll', [LaborController::class, 'storePayroll'])->name('labor.payroll.store');
+    Route::post('/labor/payroll/{labor_payroll_run}/decide', [LaborController::class, 'decidePayroll'])->name('labor.payroll.decide');
+    Route::get('/labor/ppe', [LaborController::class, 'ppe'])->name('labor.ppe');
+    Route::post('/labor/ppe', [LaborController::class, 'storePpe'])->name('labor.ppe.store');
+    Route::get('/labor/leave', [LaborController::class, 'leave'])->name('labor.leave');
+    Route::post('/labor/leave', [LaborController::class, 'storeLeave'])->name('labor.leave.store');
+    Route::post('/labor/leave/{labor_leave_request}/decide', [LaborController::class, 'decideLeave'])->name('labor.leave.decide');
+    Route::get('/quality-checks', fn () => redirect()->route('quality.index'))->name('quality-checks.index');
+    Route::get('/quality', function () {
+        $user = request()->user();
+        $desk = app(\App\Services\Quality\QualityDesk::class);
+        if ($desk->canManageTemplates($user)) {
+            return redirect()->route('quality.templates');
+        }
+        if ($desk->canPerformInspection($user)) {
+            return redirect()->route('quality.inspections');
+        }
+        if ($desk->canRaiseNcr($user)) {
+            return redirect()->route('quality.ncrs');
+        }
+        if ($desk->canViewTraceability($user)) {
+            return redirect()->route('quality.traceability');
+        }
+        if ($desk->canViewSop($user)) {
+            return redirect()->route('quality.sops');
+        }
+        abort(403);
+    })->name('quality.index');
+    Route::get('/quality/templates', [QualityController::class, 'templates'])->name('quality.templates');
+    Route::post('/branches/{branch}/quality/templates', [QualityController::class, 'storeTemplate'])->name('quality.templates.store');
+    Route::post('/quality/templates/{quality_checklist_template}', [QualityController::class, 'updateTemplate'])->name('quality.templates.update');
+    Route::get('/quality/inspections', [QualityController::class, 'inspections'])->name('quality.inspections');
+    Route::post('/branches/{branch}/quality/inspections', [QualityController::class, 'storeInspection'])->name('quality.inspections.store');
+    Route::get('/quality/ncrs', [QualityController::class, 'ncrs'])->name('quality.ncrs');
+    Route::post('/branches/{branch}/quality/ncrs', [QualityController::class, 'storeNcr'])->name('quality.ncrs.store');
+    Route::post('/branches/{branch}/quality/corrective', [QualityController::class, 'storeCorrective'])->name('quality.corrective.store');
+    Route::post('/quality/ncrs/{quality_ncr}/request-closure', [QualityController::class, 'requestNcrClosure'])->name('quality.ncrs.request-closure');
+    Route::post('/quality/ncrs/{quality_ncr}/decide', [QualityController::class, 'decideNcr'])->name('quality.ncrs.decide');
+    Route::get('/quality/pest', [QualityController::class, 'pest'])->name('quality.pest');
+    Route::post('/branches/{branch}/quality/pest', [QualityController::class, 'storePest'])->name('quality.pest.store');
+    Route::get('/quality/traceability', [QualityController::class, 'traceability'])->name('quality.traceability');
+    Route::get('/quality/traceability/print', [QualityController::class, 'printTraceability'])->name('quality.traceability.print');
+    Route::get('/quality/certificates', [QualityController::class, 'certificates'])->name('quality.certificates');
+    Route::post('/branches/{branch}/quality/certificates', [QualityController::class, 'storeCertificate'])->name('quality.certificates.store');
+    Route::get('/quality/incidents', [QualityController::class, 'incidents'])->name('quality.incidents');
+    Route::post('/branches/{branch}/quality/incidents', [QualityController::class, 'storeIncident'])->name('quality.incidents.store');
+    Route::post('/quality/incidents/{quality_incident}/request-closure', [QualityController::class, 'requestIncidentClosure'])->name('quality.incidents.request-closure');
+    Route::post('/quality/incidents/{quality_incident}/decide', [QualityController::class, 'decideIncident'])->name('quality.incidents.decide');
+    Route::get('/quality/policies', [QualityController::class, 'policies'])->name('quality.policies');
+    Route::post('/branches/{branch}/quality/policies', [QualityController::class, 'storePolicy'])->name('quality.policies.store');
+    Route::get('/quality/claims', [QualityController::class, 'claims'])->name('quality.claims');
+    Route::post('/branches/{branch}/quality/claims', [QualityController::class, 'storeClaim'])->name('quality.claims.store');
+    Route::get('/quality/safety', [QualityController::class, 'safety'])->name('quality.safety');
+    Route::post('/branches/{branch}/quality/safety', [QualityController::class, 'storeSafety'])->name('quality.safety.store');
+    Route::get('/quality/sops', [QualityController::class, 'sops'])->name('quality.sops');
+    Route::post('/branches/{branch}/quality/sops', [QualityController::class, 'storeSop'])->name('quality.sops.store');
+    Route::get('/quality/sops/versions/{quality_sop_version}/download', [QualityController::class, 'downloadSop'])->name('quality.sops.download');
+    Route::get('/notifications', [NotificationsController::class, 'dashboard'])->name('notifications.dashboard');
+    Route::get('/notifications/templates', [NotificationsController::class, 'templates'])->name('notifications.templates');
+    Route::post('/branches/{branch}/notifications/templates', [NotificationsController::class, 'storeTemplate'])->name('notifications.templates.store');
+    Route::post('/notifications/templates/{message_template}', [NotificationsController::class, 'updateTemplate'])->name('notifications.templates.update');
+    Route::get('/notifications/templates/{message_template}/preview', [NotificationsController::class, 'previewTemplate'])->name('notifications.templates.preview');
+    Route::get('/notifications/gateways', [NotificationsController::class, 'gateways'])->name('notifications.gateways');
+    Route::post('/notifications/gateways', [NotificationsController::class, 'storeGateway'])->name('notifications.gateways.store');
+    Route::post('/notifications/gateways/{communication_gateway}/test', [NotificationsController::class, 'testGateway'])->name('notifications.gateways.test');
+    Route::get('/notifications/preferences', [NotificationsController::class, 'preferences'])->name('notifications.preferences');
+    Route::post('/notifications/preferences', [NotificationsController::class, 'storePreferences'])->name('notifications.preferences.store');
+    Route::get('/notifications/compose', [NotificationsController::class, 'compose'])->name('notifications.compose');
+    Route::post('/notifications/compose', [NotificationsController::class, 'sendCustomer'])->name('notifications.compose.send');
+    Route::get('/notifications/announcements', [NotificationsController::class, 'announcements'])->name('notifications.announcements');
+    Route::post('/branches/{branch}/notifications/announcements', [NotificationsController::class, 'storeAnnouncement'])->name('notifications.announcements.store');
+    Route::get('/notifications/logs', [NotificationsController::class, 'logs'])->name('notifications.logs');
+    Route::post('/notifications/alerts/{internal_alert}/read', [NotificationsController::class, 'markRead'])->name('notifications.alerts.read');
 });

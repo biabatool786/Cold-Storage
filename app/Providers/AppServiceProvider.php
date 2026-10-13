@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Notifications\MessageGatewayDriver;
 use App\Services\Security\PasswordPolicy;
 use App\Services\Tenancy\TenantContext;
 use Illuminate\Support\ServiceProvider;
@@ -15,6 +16,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TenantContext::class);
+        $this->app->singleton(MessageGatewayDriver::class);
     }
 
     /**

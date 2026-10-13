@@ -23,6 +23,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Authorization\ApprovalLimitEvaluator;
 use App\Services\Authorization\BranchAccess;
 use App\Services\Authorization\MakerChecker;
+use App\Services\Notifications\OperationalAlertHooks;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,7 @@ class AccountsDesk
         private readonly BranchAccess $branches,
         private readonly MakerChecker $makerChecker,
         private readonly ApprovalLimitEvaluator $limits,
+        private readonly OperationalAlertHooks $operationalAlerts,
     ) {}
 
     public function canViewExpenses(User $user): bool
@@ -227,6 +229,14 @@ class AccountsDesk
             'branch_id' => $expense->branch_id,
             'new' => ['amount' => $amount, 'kind' => $kind],
         ]);
+
+        $this->operationalAlerts->pendingApproval(
+            $expense,
+            (int) $expense->tenant_id,
+            (int) $expense->branch_id,
+            'Expense',
+            'Expense #'.$expense->id.' ('.$kind.') awaits approval.'
+        );
 
         return $expense;
     }

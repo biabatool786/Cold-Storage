@@ -140,7 +140,7 @@ class RoleAccessTest extends TestCase
     public function test_supervisor_and_gatekeeper_permissions(): void
     {
         $this->actingAs($this->supervisorA)->get('/grns')->assertOk();
-        $this->actingAs($this->supervisorA)->get('/quality-checks')->assertOk();
+        $this->actingAs($this->supervisorA)->followingRedirects()->get('/quality-checks')->assertOk();
         $this->actingAs($this->supervisorA)->get('/invoices')->assertForbidden();
         $this->actingAs($this->supervisorA)->get('/settings')->assertForbidden();
         $this->actingAs($this->supervisorA)->get('/monitoring')->assertOk();

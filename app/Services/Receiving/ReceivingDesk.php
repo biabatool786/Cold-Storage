@@ -22,6 +22,7 @@ use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
 use App\Services\Customers\CustomerMaster;
 use App\Services\Inventory\InventoryDesk;
+use App\Services\Notifications\OperationalAlertHooks;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,6 +36,7 @@ class ReceivingDesk
         private readonly ReasonRequirement $reasons,
         private readonly CustomerMaster $customers,
         private readonly InventoryDesk $inventory,
+        private readonly OperationalAlertHooks $operationalAlerts,
     ) {}
 
     public function canView(User $user): bool
@@ -302,7 +304,16 @@ class ReceivingDesk
             'new' => ['proposed_outcome' => $outcome, 'accepted_qty' => $accepted],
         ]);
 
-        return $receipt->fresh();
+        $fresh = $receipt->fresh();
+        $this->operationalAlerts->pendingApproval(
+            $fresh,
+            (int) $fresh->tenant_id,
+            (int) $fresh->branch_id,
+            'GRN outcome',
+            'GRN #'.$fresh->id.' outcome "'.$outcome.'" awaits confirmation.'
+        );
+
+        return $fresh;
     }
 
     public function confirmOutcome(User $actor, GoodsReceipt $receipt, string $outcome, ?float $acceptedQty = null, ?string $notes = null): GoodsReceipt
@@ -512,6 +523,11 @@ class ReceivingDesk
                 'reason' => $isOverride ? $overrideReason : null,
                 'new' => ['slot_id' => $slot->id, 'lot_id' => $lot->id, 'override' => $isOverride],
             ]);
+
+            $chamber = Chamber::query()->find($task->chamber_id);
+            if ($chamber) {
+                $this->operationalAlerts->checkChamberOccupancy($chamber);
+            }
 
             return $task->fresh();
         });

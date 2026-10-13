@@ -379,6 +379,19 @@ class MonitoringDesk
             'new' => ['message' => $alarm->message],
         ]);
 
+        $category = str_contains(strtolower($alarm->message), 'humidity') ? 'humidity' : 'temperature';
+        app(\App\Services\Notifications\AlertDispatcher::class)->dispatch([
+            'tenant_id' => (int) $chamber->tenant_id,
+            'branch_id' => (int) $chamber->branch_id,
+            'category' => $category,
+            'title' => 'Chamber threshold alert',
+            'body' => $alarm->message.' ('.$chamber->name.')',
+            'severity' => 'warning',
+            'reference_type' => MonitoringAlarm::class,
+            'reference_id' => $alarm->id,
+            'idempotency_key' => 'monitor-alarm:'.$alarm->id.':'.$category,
+        ]);
+
         if ($actor->isSuperAdmin() || $actor->hasRole(RoleName::Admin)) {
             $this->openIncident($actor, $alarm, 'Auto-created from threshold alarm.');
         }

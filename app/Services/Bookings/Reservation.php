@@ -18,6 +18,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Authorization\BranchAccess;
 use App\Services\Authorization\MakerChecker;
 use App\Services\Authorization\ReasonRequirement;
+use App\Services\Notifications\OperationalAlertHooks;
 use Illuminate\Support\Collection;
 
 class Reservation
@@ -29,6 +30,7 @@ class Reservation
         private readonly BranchAccess $branches,
         private readonly MakerChecker $makerChecker,
         private readonly ReasonRequirement $reasons,
+        private readonly OperationalAlertHooks $operationalAlerts,
     ) {}
 
     public function canCreate(User $user): bool
@@ -144,6 +146,21 @@ class Reservation
         $this->audit->record('booking.requested', $booking, ['status' => $status], $branch->tenant_id, [
             'module' => 'bookings', 'branch_id' => $branch->id,
         ]);
+
+        if ($status === 'pending') {
+            $this->operationalAlerts->pendingApproval(
+                $booking,
+                (int) $booking->tenant_id,
+                (int) $booking->branch_id,
+                'Booking',
+                'Booking #'.$booking->id.' awaits approval.'
+            );
+        }
+        if (! empty($data['chamber_id'])) {
+            $this->operationalAlerts->checkChamberOccupancy(
+                Chamber::query()->findOrFail($data['chamber_id'])
+            );
+        }
 
         return $booking;
     }

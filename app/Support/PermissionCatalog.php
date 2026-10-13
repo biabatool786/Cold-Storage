@@ -123,7 +123,7 @@ class PermissionCatalog
             'vendors' => ['view', 'create'],
             'maintenance' => ['view', 'create', 'edit', 'execute', 'print'],
             'energy' => ['view', 'create', 'edit'],
-            'labor' => ['view', 'create', 'edit', 'execute'],
+            'labor' => ['view', 'create', 'edit', 'execute', 'approve'],
             'quality' => ['view', 'create', 'edit'],
             'notifications' => ['view', 'create', 'edit', 'execute'],
             'reports' => ['view', 'create', 'execute', 'print'],
@@ -162,9 +162,9 @@ class PermissionCatalog
             'accounts' => ['view', 'print'],
             'maintenance' => ['view', 'create', 'edit', 'approve', 'execute', 'print'],
             'energy' => ['view', 'create', 'approve', 'print'],
-            'labor' => ['view', 'create', 'approve', 'execute'],
+            'labor' => ['view', 'create', 'edit', 'approve', 'execute'],
             'quality' => ['view', 'create', 'edit', 'approve', 'execute', 'print'],
-            'notifications' => ['view', 'execute'],
+            'notifications' => ['view', 'create', 'execute'],
             'reports' => ['view', 'create', 'execute', 'print'],
             'settings' => ['view'],
         ]);
@@ -198,8 +198,9 @@ class PermissionCatalog
             'accounts' => ['view'],
             'maintenance' => ['view', 'create', 'execute'],
             'energy' => ['view', 'create'],
-            'labor' => ['view', 'create', 'edit', 'execute'],
-            'quality' => ['view', 'create', 'edit', 'execute', 'print'],
+            'labor' => ['view', 'create', 'edit', 'execute', 'approve'],
+            'quality' => ['view', 'create', 'edit', 'execute'],
+            'notifications' => ['view', 'edit'],
             'reports' => ['view', 'print'],
         ]);
     }
@@ -224,8 +225,9 @@ class PermissionCatalog
             'monitoring' => ['view'],
             'maintenance' => ['create'],
             'energy' => ['create'],
-            'labor' => ['execute'],
+            'labor' => ['create', 'edit', 'execute'],
             'quality' => ['view', 'create'],
+            'notifications' => ['view'],
             'reports' => ['print'],
         ]);
     }
@@ -257,7 +259,7 @@ class PermissionCatalog
             'maintenance' => ['view'],
             'energy' => ['view', 'edit'],
             'labor' => ['view', 'create', 'edit', 'execute', 'print'],
-            'quality' => ['view', 'edit'],
+            'quality' => ['view', 'create', 'edit'],
             'notifications' => ['view', 'execute'],
             'reports' => ['view', 'create', 'execute', 'print'],
             'settings' => ['view'],
